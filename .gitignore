@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Environment / secrets
+.env
+*.env
+
+# Database (participant data)
+data/sessions.db
+data/*.db
+
+# Exports (raw study data)
+exports/
+
+# Logs
+*.log
+server.log
+server_err.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

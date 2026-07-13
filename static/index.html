@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GroundLens</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg: #EDE6DA;
+      --ink: #241A10;
+      --muted: #8C7B6A;
+      --line: #DDD3C2;
+      --surface: #FDFAF3;
+      --surface-2: #F5EEE3;
+      --accent: #5C8A6F;
+      --accent-dark: #3D6B52;
+      --accent-light: rgba(92,138,111,.10);
+      --dot-new: #6B9E85;
+      --dot-old: #A99C8E;
+      --red: #B8574A;
+      --shadow-sm: 0 2px 8px rgba(36,26,16,.07);
+      --shadow: 0 10px 36px rgba(36,26,16,.10);
+      --shadow-lg: 0 22px 60px rgba(36,26,16,.14);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", "Aptos", "Noto Sans KR", -apple-system, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 58% 52% at 10% 22%, rgba(92,138,111,.22) 0%, transparent 100%),
+        radial-gradient(ellipse 52% 48% at 90% 78%, rgba(188,118,75,.18) 0%, transparent 100%),
+        radial-gradient(ellipse 75% 55% at 55% 5%,  rgba(204,190,168,.14) 0%, transparent 100%),
+        var(--bg);
+    }
+
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+    .screen { display: none; }
+    .screen.active { display: flex; }
+    .center {
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* ─── SETUP SCREENS ─────────────────────────────── */
+    .setup-box {
+      width: min(452px, 100%);
+      background: rgba(253,250,243,.84);
+      backdrop-filter: blur(26px) saturate(155%);
+      -webkit-backdrop-filter: blur(26px) saturate(155%);
+      border: 1px solid rgba(255,255,255,.58);
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,.72);
+      padding: 38px;
+      border-radius: 20px;
+    }
+    .setup-box h1 {
+      margin: 0 0 9px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+    }
+    .setup-box p {
+      margin: 0 0 24px;
+      color: var(--muted);
+      line-height: 1.72;
+      font-size: 14.5px;
+    }
+    label {
+      display: block;
+      margin: 20px 0 7px;
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1.5px solid var(--line);
+      background: rgba(255,255,255,.62);
+      color: var(--ink);
+      border-radius: 11px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    textarea { min-height: 130px; resize: vertical; line-height: 1.65; }
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      background: rgba(255,255,255,.88);
+      box-shadow: 0 0 0 3px rgba(92,138,111,.13);
+    }
+    .primary {
+      margin-top: 22px;
+      width: 100%;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      border-radius: 11px;
+      padding: 13px 16px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: .01em;
+      box-shadow: 0 4px 18px rgba(92,138,111,.30);
+      transition: background .18s, transform .1s, box-shadow .18s;
+    }
+    .primary:hover  { background: var(--accent-dark); box-shadow: 0 6px 22px rgba(92,138,111,.38); }
+    .primary:active { transform: scale(.98); }
+    .primary:disabled { background: #b2bab5; box-shadow: none; cursor: wait; }
+
+    /* ─── PROFILE FORM ─────────────────────────────── */
+    .profile-box {
+      width: min(700px, 100%);
+      background: rgba(253,250,243,.84);
+      backdrop-filter: blur(26px) saturate(155%);
+      -webkit-backdrop-filter: blur(26px) saturate(155%);
+      border: 1px solid rgba(255,255,255,.58);
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,.72);
+      padding: 38px;
+      border-radius: 20px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .profile-box h1 { margin: 0 0 9px; font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+    .profile-box p  { margin: 0 0 24px; color: var(--muted); line-height: 1.72; font-size: 13.5px; }
+    .form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .radio-group, .check-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+    .radio-btn, .check-btn {
+      padding: 5px 13px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .radio-btn:hover, .check-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .radio-btn.selected, .check-btn.selected {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .event-list { display: flex; flex-direction: column; gap: 8px; margin-top: 7px; }
+    .event-row { display: flex; gap: 8px; align-items: center; }
+    .event-row input[type=date] { flex: 0 0 150px; }
+    .event-row .event-desc { flex: 1; }
+    .event-remove { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; }
+    .event-remove:hover { color: var(--red); }
+    .btn-add {
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1.5px dashed var(--line);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all .15s;
+    }
+    .btn-add:hover { border-color: var(--accent); color: var(--accent); }
+    .consent-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+    .consent-row input[type=checkbox] { width: auto; margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
+    .consent-row label { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; text-transform: none; font-weight: 400; letter-spacing: 0; }
+
+    /* ─── MAIN LAYOUT ───────────────────────────────── */
+    #screen-main {
+      height: 100vh;
+      overflow: hidden;
+      flex-direction: column;
+    }
+
+    /* ─── CHAT ──────────────────────────────────────── */
+    .chat {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+    }
+    .chat-head {
+      height: 62px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: rgba(253,250,243,.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      flex-shrink: 0;
+    }
+    .chat-head-left { display: flex; align-items: center; gap: 10px; }
+    .chat-head h2 {
+      margin: 0;
+      font-size: 15.5px;
+      font-weight: 600;
+      letter-spacing: -.3px;
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 2.5px rgba(92,138,111,.22);
+      flex-shrink: 0;
+    }
+
+    /* ─── TYPING INDICATOR ─────────────────────────── */
+    .typing-indicator {
+      align-self: flex-start;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 4px 18px 18px 18px;
+      box-shadow: var(--shadow-sm);
+      padding: 13px 18px;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      animation: rise .22s cubic-bezier(.34,1.18,.64,1) both;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      opacity: .30;
+      animation: typing-pulse 1.3s ease infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .22s; }
+    .typing-dot:nth-child(3) { animation-delay: .44s; }
+    @keyframes typing-pulse {
+      0%, 60%, 100% { opacity: .30; transform: translateY(0); }
+      30%            { opacity: .90; transform: translateY(-4px); }
+    }
+
+    /* GL toggle pill button */
+    .gl-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 15px 7px 11px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .01em;
+      transition: border-color .2s, color .2s, background .2s, box-shadow .2s;
+    }
+    .gl-toggle svg { flex-shrink: 0; }
+    .gl-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-light);
+    }
+    .gl-toggle.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 4px 16px rgba(92,138,111,.32);
+    }
+    .gl-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: rgba(92,138,111,.16);
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent);
+      transition: all .2s;
+    }
+    .gl-toggle.active .gl-badge {
+      background: rgba(255,255,255,.26);
+      color: white;
+    }
+
+    .messages {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+    .msg {
+      max-width: 70%;
+      padding: 11px 15px;
+      white-space: pre-wrap;
+      line-height: 1.68;
+      font-size: 14.5px;
+      animation: rise .26s cubic-bezier(.34,1.18,.64,1) both;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--accent);
+      color: white;
+      border-radius: 18px 18px 4px 18px;
+      box-shadow: 0 3px 14px rgba(92,138,111,.24);
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 4px 18px 18px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .composer {
+      flex-shrink: 0;
+      border-top: 1px solid var(--line);
+      padding: 13px 16px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: rgba(253,250,243,.97);
+    }
+    .composer textarea {
+      flex: 1;
+      min-height: 44px;
+      max-height: 152px;
+      border: 1.5px solid var(--line);
+      border-radius: 22px;
+      padding: 10px 18px;
+      background: var(--surface-2);
+      color: var(--ink);
+      resize: none;
+      line-height: 1.55;
+      transition: border-color .18s, background .18s, box-shadow .18s;
+    }
+    .composer textarea:focus {
+      border-color: var(--accent);
+      background: white;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(92,138,111,.10);
+    }
+    .send {
+      width: 44px; height: 44px;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 3px 14px rgba(92,138,111,.30);
+      transition: background .18s, transform .1s, box-shadow .18s;
+    }
+    .send:hover  { background: var(--accent-dark); box-shadow: 0 5px 18px rgba(92,138,111,.38); }
+    .send:active { transform: scale(.90); }
+    .send:disabled { background: #b8c2bd; box-shadow: none; cursor: wait; }
+
+    /* ─── GROUNDLENS BACKDROP ───────────────────────── */
+    .gl-backdrop {
+      position: fixed; inset: 0;
+      z-index: 198;
+      background: rgba(36,26,16,.07);
+      backdrop-filter: blur(1.5px);
+      -webkit-backdrop-filter: blur(1.5px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s ease;
+    }
+    .gl-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    /* ─── GROUNDLENS GLASSMORPHISM PANEL ────────────── */
+    .groundlens {
+      position: fixed;
+      top: 0; right: 0;
+      width: min(560px, 52vw);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+
+      /* Liquid Glass core */
+      background: rgba(237,230,218,.19);
+      backdrop-filter: blur(30px) saturate(175%) brightness(1.05);
+      -webkit-backdrop-filter: blur(30px) saturate(175%) brightness(1.05);
+
+      border-left: 1px solid rgba(255,255,255,.38);
+      box-shadow:
+        -10px 0 52px rgba(36,26,16,.14),
+        inset 1px 0 0 rgba(255,255,255,.48),
+        inset 0 1px 0 rgba(255,255,255,.32);
+
+      z-index: 200;
+      transform: translateX(100%);
+      transition: transform .38s cubic-bezier(.32,.72,0,1);
+    }
+    .groundlens.open { transform: translateX(0); }
+
+    .gl-head {
+      height: 62px;
+      padding: 0 16px 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(140,118,96,.34);
+      background: rgba(255,255,255,.10);
+      flex-shrink: 0;
+    }
+    .gl-head h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+    }
+    .gl-head-right { display: flex; align-items: center; gap: 10px; }
+    .counts { display: flex; gap: 6px; }
+    .count {
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.24);
+      border: 1px solid rgba(255,255,255,.32);
+      color: var(--ink);
+      font-size: 11.5px;
+      font-weight: 700;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .gl-close {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.30);
+      background: rgba(255,255,255,.16);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .18s, color .18s;
+    }
+    .gl-close:hover { background: rgba(255,255,255,.30); color: var(--ink); }
+
+    /* ─── GL FILTER BAR ────────────────────────────── */
+    .gl-filter-bar {
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid rgba(140,118,96,.22);
+      background: rgba(255,255,255,.07);
+      flex-shrink: 0;
+      min-height: 42px;
+    }
+    .gl-filter-btn {
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.10);
+      color: rgba(36,26,16,.72);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .gl-filter-btn:hover { background: rgba(255,255,255,.28); color: var(--ink); }
+    .gl-filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 2px 8px rgba(92,138,111,.28);
+    }
+
+    .gl-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 0;
+      position: relative;
+    }
+    .zone {
+      position: relative;
+      overflow: hidden;
+      border-right: 1px solid rgba(140,118,96,.40);
+      min-height: 0;
+      background: rgba(255,255,255,.05);
+    }
+    .zone-title {
+      position: absolute;
+      top: 13px; left: 14px;
+      z-index: 2;
+      color: rgba(140,123,106,.82);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .10em;
+      pointer-events: none;
+    }
+    .llm-stack {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 0;
+    }
+    .subzone {
+      position: relative;
+      min-height: 92px;
+      border-bottom: 1px solid rgba(140,118,96,.32);
+    }
+    .subzone:last-child { border-bottom: 0; }
+
+    /* ─── DOTS ──────────────────────────────────────── */
+    .dot {
+      position: absolute;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      background: var(--dot-old);
+      opacity: .52;
+      transform: translate(-50%, -50%) scale(1);
+      transition: transform .44s cubic-bezier(.34,1.56,.64,1), opacity .15s ease;
+      box-shadow: 0 0 0 1.5px rgba(255,255,255,.38), 0 2px 6px rgba(36,26,16,.12);
+      z-index: 5;
+    }
+    .dot.new {
+      background: var(--dot-new);
+      opacity: .80;
+      box-shadow: 0 0 0 2px rgba(107,158,133,.28), 0 2px 6px rgba(36,26,16,.10);
+    }
+    .dot.edited { background: var(--red); opacity: .95; }
+    .dot[draggable="true"] { cursor: grab; }
+    .dot[draggable="true"]:active { cursor: grabbing; }
+
+    /* ─── TOOLTIP ───────────────────────────────────── */
+    .tooltip {
+      position: absolute; z-index: 40;
+      max-width: 268px;
+      background: rgba(36,26,16,.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      color: rgba(255,255,255,.92);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 12.5px;
+      line-height: 1.56;
+      box-shadow: var(--shadow);
+      display: none;
+      pointer-events: none;
+    }
+
+    /* ─── SOURCE + CORRECTION POPUPS ───────────────── */
+    .source-pop, .correction-pop {
+      position: absolute; z-index: 40;
+      background: rgba(253,250,243,.92);
+      backdrop-filter: blur(22px) saturate(155%);
+      -webkit-backdrop-filter: blur(22px) saturate(155%);
+      border: 1px solid rgba(255,255,255,.58);
+      border-radius: 13px;
+      padding: 15px 17px;
+      font-size: 13px;
+      line-height: 1.56;
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.62);
+      width: 338px;
+      display: none;
+    }
+    .source-pop h3, .correction-pop h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .source-text {
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.62;
+    }
+    .correction-pop textarea {
+      min-height: 80px;
+      border-radius: 9px;
+      background: rgba(255,255,255,.66);
+    }
+    .pop-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .mini {
+      border: 1.5px solid var(--line);
+      background: rgba(255,255,255,.68);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--muted);
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .mini:hover { border-color: var(--accent); color: var(--accent); }
+    .mini.ok {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+      box-shadow: 0 3px 12px rgba(92,138,111,.26);
+    }
+    .mini.ok:hover { background: var(--accent-dark); }
+
+    /* ─── CONTEXT MENU ──────────────────────────────── */
+    .ctx-menu {
+      position: fixed; z-index: 300;
+      background: rgba(253,250,243,.94);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      border: 1px solid rgba(255,255,255,.58);
+      border-radius: 11px;
+      box-shadow: var(--shadow);
+      padding: 5px 0;
+      display: none;
+      min-width: 120px;
+      overflow: hidden;
+    }
+    .ctx-menu button {
+      display: block;
+      width: 100%;
+      padding: 9px 16px;
+      border: none;
+      background: none;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--red);
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .ctx-menu button:hover { background: rgba(184,87,74,.08); }
+
+    /* ─── DROP HIGHLIGHT ────────────────────────────── */
+    .drop-ready {
+      background: rgba(92,138,111,.10) !important;
+      outline: 2px dashed rgba(92,138,111,.38);
+      outline-offset: -4px;
+    }
+
+    /* ─── TOAST ─────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      left: 50%; top: 18px;
+      transform: translateX(-50%);
+      background: rgba(36,26,16,.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.92);
+      padding: 10px 18px;
+      border-radius: 10px;
+      display: none;
+      z-index: 500;
+      font-size: 13.5px;
+      font-weight: 500;
+      box-shadow: var(--shadow);
+    }
+
+    /* ─── STAGE BAR ────────────────────────────────── */
+    .stage-bar {
+      height: 44px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(245,238,227,.96);
+      flex-shrink: 0;
+    }
+    .stage-steps {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+    .stage-step {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border: 1.5px solid var(--line);
+      color: var(--muted);
+      background: transparent;
+      transition: all .2s;
+    }
+    .stage-step.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 2px 8px rgba(92,138,111,.28);
+    }
+    .stage-step.done {
+      background: var(--accent-light);
+      border-color: rgba(92,138,111,.30);
+      color: var(--accent);
+    }
+    .stage-sep { color: var(--line); font-size: 12px; flex-shrink: 0; }
+    .stage-gate-btn {
+      padding: 5px 14px;
+      border-radius: 999px;
+      border: 1.5px solid var(--accent);
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 11.5px;
+      font-weight: 600;
+      display: none;
+      transition: all .18s;
+      animation: pulse-gate 1.8s ease infinite;
+    }
+    .stage-gate-btn.visible { display: block; }
+    .stage-gate-btn:hover {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 3px 12px rgba(92,138,111,.30);
+    }
+    @keyframes pulse-gate {
+      0%,100% { box-shadow: 0 0 0 0 rgba(92,138,111,.30); }
+      50%      { box-shadow: 0 0 0 5px rgba(92,138,111,.0); }
+    }
+
+    /* ─── DEBUG BUTTON ─────────────────────────────── */
+    .debug-btn {
+      width: 34px; height: 34px;
+      border-radius: 9px;
+      border: 1.5px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color .18s, color .18s, background .18s;
+      flex-shrink: 0;
+    }
+    .debug-btn:hover { border-color: var(--muted); color: var(--ink); background: var(--surface-2); }
+    .chat-head-right { display: flex; align-items: center; gap: 10px; }
+
+    /* ─── DEBUG SCREEN ──────────────────────────────── */
+    #screen-debug {
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--bg);
+      min-height: 100vh;
+    }
+    .debug-head {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 60px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(237,230,218,.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .debug-back {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px 7px 10px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: border-color .18s, color .18s, background .18s;
+    }
+    .debug-back:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .debug-head-title { margin: 0; font-size: 15px; font-weight: 600; flex: 1; letter-spacing: -.2px; }
+    .debug-meta { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+    .debug-refresh {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 13px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .18s, color .18s;
+    }
+    .debug-refresh:hover { border-color: var(--accent); color: var(--accent); }
+    .debug-body {
+      padding: 24px;
+      max-width: 1080px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .debug-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .debug-card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .debug-card-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin: 0;
+      flex: 1;
+    }
+    .debug-count {
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .debug-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .f-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      line-height: 1.52;
+    }
+    .f-item:last-child { border-bottom: 0; }
+    .f-bullet {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .f-premise { flex: 1; color: var(--ink); }
+    .ev-badges { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; }
+    .ev-badge {
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .ev-direct    { background: rgba(92,138,111,.10); color: #3D6B52; border: 1px solid rgba(92,138,111,.22); }
+    .ev-approval  { background: rgba(70,130,180,.10); color: #2B5C8A; border: 1px solid rgba(70,130,180,.20); }
+    .ev-correction { background: rgba(185,115,72,.10); color: #7A3E10; border: 1px solid rgba(185,115,72,.20); }
+    .ev-subsequent { background: rgba(70,150,140,.10); color: #205A52; border: 1px solid rgba(70,150,140,.20); }
+    .ev-interface  { background: rgba(130,80,160,.10); color: #5A1888; border: 1px solid rgba(130,80,160,.20); }
+    .debug-item {
+      padding: 8px 11px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      font-size: 12.5px;
+      color: var(--ink);
+      margin-bottom: 6px;
+      line-height: 1.52;
+    }
+    .debug-item:last-child { margin-bottom: 0; }
+    .debug-item-meta {
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-top: 3px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .debug-subzone-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin: 12px 0 6px;
+      padding-left: 2px;
+    }
+    .debug-subzone-label:first-child { margin-top: 0; }
+    .debug-correction-item {
+      border-left: 3px solid var(--accent);
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      line-height: 1.52;
+    }
+    .debug-deletion-item {
+      border-left: 3px solid var(--red);
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      line-height: 1.52;
+    }
+    .debug-empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 12px 0;
+      font-style: italic;
+      margin: 0;
+    }
+    @media (max-width: 760px) { .debug-grid-2 { grid-template-columns: 1fr; } }
+
+    /* ─── ANIMATIONS ────────────────────────────────── */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(7px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ─── RESPONSIVE ────────────────────────────────── */
+    @media (max-width: 600px) {
+      .groundlens { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+  <div id="gl-backdrop" class="gl-backdrop"></div>
+  <div id="ctx-menu" class="ctx-menu">
+    <button id="ctx-delete">삭제</button>
+  </div>
+
+  <!-- SETUP: participant ID -->
+  <section id="screen-setup" class="screen center active">
+    <div class="setup-box">
+      <h1>GroundLens</h1>
+      <p>연구자 설정 화면입니다. 참가자 ID를 입력한 뒤 다음 화면으로 이동합니다.</p>
+      <label for="participant-id">Participant ID</label>
+      <input id="participant-id" autocomplete="off" />
+      <button id="btn-to-intent" class="primary">시작</button>
+    </div>
+  </section>
+
+  <!-- SETUP: intent -->
+  <section id="screen-intent" class="screen center">
+    <div class="setup-box">
+      <h1>방학 계획 세우기</h1>
+      <p>AI 파트너와 함께 다음 방학 계획을 세웁니다. 달성하고 싶은 목표나 제약 조건을 한두 문장으로 적어주세요.</p>
+      <label for="intent-text">방학 목표 및 제약</label>
+      <textarea id="intent-text"></textarea>
+      <button id="btn-start-session" class="primary">대화 시작</button>
+    </div>
+  </section>
+
+  <!-- PROFILE: constraint form -->
+  <section id="screen-profile" class="screen center">
+    <div class="profile-box">
+      <h1>참가자 제약 프로필</h1>
+      <p>아래 정보는 연구 분석에만 사용되며, AI 파트너에게는 전달되지 않습니다.</p>
+
+      <label>방학 최우선 목표 (순위 순)</label>
+      <div class="form-row-3">
+        <input id="p-priority1" type="text" placeholder="1위" />
+        <input id="p-priority2" type="text" placeholder="2위" />
+        <input id="p-priority3" type="text" placeholder="3위 (선택)" />
+      </div>
+
+      <label>하루 활동 패턴</label>
+      <div class="radio-group" id="time-pref-group">
+        <button type="button" class="radio-btn" data-value="아침형">아침형</button>
+        <button type="button" class="radio-btn" data-value="중립">중립</button>
+        <button type="button" class="radio-btn" data-value="저녁형">저녁형</button>
+      </div>
+
+      <label>알바·인턴 주당 시간 및 요일</label>
+      <div class="form-row">
+        <input id="p-work-hours" type="number" placeholder="주당 시간 (0 = 없음)" min="0" max="80" />
+        <div class="check-group" id="work-days-group">
+          <button type="button" class="check-btn" data-value="월">월</button>
+          <button type="button" class="check-btn" data-value="화">화</button>
+          <button type="button" class="check-btn" data-value="수">수</button>
+          <button type="button" class="check-btn" data-value="목">목</button>
+          <button type="button" class="check-btn" data-value="금">금</button>
+          <button type="button" class="check-btn" data-value="토">토</button>
+          <button type="button" class="check-btn" data-value="일">일</button>
+        </div>
+      </div>
+
+      <label>월 예산 상한 (원)</label>
+      <input id="p-budget" type="number" placeholder="예: 500000" min="0" />
+
+      <label>고정 일정 (변경 불가한 날짜·행사)</label>
+      <div id="fixed-events-list" class="event-list"></div>
+      <button type="button" class="btn-add" id="btn-add-event">+ 일정 추가</button>
+
+      <label>절대 하기 싫은 것</label>
+      <textarea id="p-forbidden" placeholder="예: 새벽에 일어나기, 팀 프로젝트"></textarea>
+
+      <label>건강·체력 수준</label>
+      <div class="radio-group" id="health-group">
+        <button type="button" class="radio-btn" data-value="낮음">낮음</button>
+        <button type="button" class="radio-btn" data-value="보통">보통</button>
+        <button type="button" class="radio-btn" data-value="높음">높음</button>
+      </div>
+      <textarea id="p-health-note" placeholder="건강·체력 관련 추가 설명 (선택)" style="margin-top:8px;min-height:60px"></textarea>
+
+      <label>학습 스타일</label>
+      <div class="radio-group" id="study-style-group">
+        <button type="button" class="radio-btn" data-value="혼자/온라인">혼자·온라인</button>
+        <button type="button" class="radio-btn" data-value="혼자/오프라인">혼자·오프라인</button>
+        <button type="button" class="radio-btn" data-value="스터디/온라인">스터디·온라인</button>
+        <button type="button" class="radio-btn" data-value="스터디/오프라인">스터디·오프라인</button>
+      </div>
+
+      <label>통학·통근 왕복 시간 (분)</label>
+      <div class="form-row">
+        <input id="p-commute" type="number" placeholder="왕복 분 (예: 90)" min="0" max="300" />
+        <div style="display:flex;align-items:center;gap:10px;padding-top:8px">
+          <input id="p-has-car" type="checkbox" style="width:auto;accent-color:var(--accent)" />
+          <span style="font-size:13.5px;color:var(--muted)">자차 있음</span>
+        </div>
+      </div>
+
+      <label>반드시 끝내야 하는 것</label>
+      <textarea id="p-must-complete" placeholder="예: TOEIC 응시, 졸업 논문 초안 작성"></textarea>
+
+      <div class="consent-row">
+        <input type="checkbox" id="p-consent" />
+        <label for="p-consent">위 정보는 연구 목적으로만 사용되며, 실험 종료 후 익명화되어 보관됩니다. 이에 동의합니다.</label>
+      </div>
+
+      <button id="btn-submit-profile" class="primary">프로필 저장 후 대화 시작</button>
+    </div>
+  </section>
+
+  <!-- MAIN: chat + GL popup -->
+  <section id="screen-main" class="screen">
+
+    <main class="chat">
+      <header class="chat-head">
+        <div class="chat-head-left">
+          <div class="status-dot"></div>
+          <h2>Chatbot</h2>
+        </div>
+        <div class="chat-head-right">
+          <button id="btn-debug" class="debug-btn" title="Debug View">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <rect x="1.5" y="1.5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M4 4.5h5M4 6.5h5M4 8.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button id="btn-gl-toggle" class="gl-toggle">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <circle cx="6.5" cy="6.5" r="4.75" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="6.5" cy="6.5" r="1.9" fill="currentColor"/>
+            </svg>
+            GroundLens
+            <span class="gl-badge" id="gl-total-badge">0</span>
+          </button>
+        </div>
+      </header>
+
+      <div id="stage-bar" class="stage-bar">
+        <div class="stage-steps">
+          <span id="stage-s1" class="stage-step active">S1 목표 탐색</span>
+          <span class="stage-sep">›</span>
+          <span id="stage-s2" class="stage-step">S2 계획 초안</span>
+          <span class="stage-sep">›</span>
+          <span id="stage-s3" class="stage-step">S3 최종 점검</span>
+        </div>
+        <button id="btn-stage-advance" class="stage-gate-btn">단계 완료 →</button>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <div class="composer">
+        <textarea id="chat-input" placeholder="메시지를 입력하세요"></textarea>
+        <button id="btn-send" class="send" title="전송">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <path d="M13 7.5L2 2.5 4.5 7.5 2 12.5 13 7.5Z" fill="currentColor" stroke="currentColor" stroke-width=".4" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </main>
+
+    <!-- GROUNDLENS GLASS PANEL -->
+    <aside id="gl-popup" class="groundlens">
+      <header class="gl-head">
+        <h2>GroundLens</h2>
+        <div class="gl-head-right">
+          <div class="counts">
+            <span id="cg-count"  class="count">CG 0</span>
+            <span id="llm-count" class="count">LLM 0</span>
+          </div>
+          <button id="btn-gl-close" class="gl-close" title="닫기">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="gl-filter-bar" class="gl-filter-bar">
+        <button class="gl-filter-btn active" data-filter="all" id="gl-filter-all">ALL</button>
+      </div>
+
+      <div id="gl-body" class="gl-body">
+        <section id="cg-zone" class="zone">
+          <div class="zone-title">Common Ground</div>
+        </section>
+        <section class="zone llm-stack">
+          <div id="zone-struct"  class="subzone"><div class="zone-title">구조적 결정</div></div>
+          <div id="zone-premise" class="subzone"><div class="zone-title">암묵적 전제</div></div>
+          <div id="zone-term"    class="subzone"><div class="zone-title">용어 해석</div></div>
+        </section>
+        <div id="tooltip"        class="tooltip"></div>
+        <div id="source-pop"     class="source-pop">
+          <h3>출처 대화</h3>
+          <div id="source-text"  class="source-text"></div>
+        </div>
+        <div id="correction-pop" class="correction-pop">
+          <h3>수정 grounding 입력</h3>
+          <textarea id="correction-text"></textarea>
+          <div class="pop-actions">
+            <button id="btn-cancel-correction"  class="mini">취소</button>
+            <button id="btn-submit-correction"  class="mini ok">제출</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <!-- DEBUG SCREEN -->
+  <section id="screen-debug" class="screen">
+    <header class="debug-head">
+      <button id="btn-debug-back" class="debug-back">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M9 2L4 7L9 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        채팅으로
+      </button>
+      <h2 class="debug-head-title">Session Debug</h2>
+      <span id="debug-meta" class="debug-meta"></span>
+      <button id="btn-debug-refresh" class="debug-refresh">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+          <path d="M9.5 2A5 5 0 1 0 10 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M10 2V5H7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        새로고침
+      </button>
+    </header>
+    <div id="debug-body" class="debug-body">
+      <p class="debug-empty" style="text-align:center;padding:60px 0">세션을 시작한 뒤 디버그 창을 열어주세요.</p>
+    </div>
+  </section>
+
+  <script>
+    const state = {
+      participantId: '',
+      sessionId: '',
+      ws: null,
+      waiting: false,
+      draggedItem: null,
+      correctionPoint: null,
+      ctxItem: null,
+      glOpen: false,
+      lastDebugData: null,
+      currentStage: 'S1',
+      userIntent: '',
+      allCommon: [],
+      allLlm: [],
+      newIds: new Set(),
+      glFilter: 'all',
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    /* ── screen routing ── */
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    /* ── toast ── */
+    function toast(text) {
+      const el = $('toast');
+      el.textContent = text;
+      el.style.display = 'block';
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => { el.style.display = 'none'; }, 2600);
+    }
+
+    /* ── Stage management ── */
+    function renderStage(stage, gateReady) {
+      state.currentStage = stage || 'S1';
+      const order = ['S1', 'S2', 'S3'];
+      const ids   = { S1: 'stage-s1', S2: 'stage-s2', S3: 'stage-s3' };
+      const labels = { S1: '목표 확정 →', S2: '초안 확정 →', S3: '최종 확정 →' };
+      const idx = order.indexOf(state.currentStage);
+      order.forEach((s, i) => {
+        const el = $(ids[s]);
+        el.classList.remove('active', 'done');
+        if (i < idx) el.classList.add('done');
+        else if (i === idx) el.classList.add('active');
+      });
+      const btn = $('btn-stage-advance');
+      btn.textContent = labels[state.currentStage] || '완료 →';
+      if (gateReady && stage !== 'done') btn.classList.add('visible');
+      else btn.classList.remove('visible');
+    }
+
+    async function advanceStage() {
+      const nextMap = { S1: 'S2', S2: 'S3', S3: 'done' };
+      const toStage = nextMap[state.currentStage];
+      if (!toStage) return;
+      try {
+        const data = await api('/api/stage/advance', { session_id: state.sessionId, to_stage: toStage });
+        renderStage(toStage, toStage === 'S3');
+        toast(data.message);
+      } catch (err) {
+        toast('단계 전환 실패: ' + err.message);
+      }
+    }
+
+    $('btn-stage-advance').addEventListener('click', advanceStage);
+
+    /* ── GroundLens panel toggle ── */
+    function openGL() {
+      state.glOpen = true;
+      $('gl-popup').classList.add('open');
+      $('gl-backdrop').classList.add('open');
+      $('btn-gl-toggle').classList.add('active');
+    }
+    function closeGL() {
+      state.glOpen = false;
+      $('gl-popup').classList.remove('open');
+      $('gl-backdrop').classList.remove('open');
+      $('btn-gl-toggle').classList.remove('active');
+    }
+    $('btn-gl-toggle').addEventListener('click', () => state.glOpen ? closeGL() : openGL());
+    $('btn-gl-close').addEventListener('click', closeGL);
+    $('gl-backdrop').addEventListener('click', closeGL);
+
+    /* ── api helper ── */
+    async function api(path, body) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    /* ── setup screens ── */
+    $('btn-to-intent').addEventListener('click', () => {
+      const pid = $('participant-id').value.trim();
+      if (!pid) { toast('참가자 ID를 입력하세요.'); return; }
+      state.participantId = pid;
+      showScreen('screen-intent');
+      $('intent-text').focus();
+    });
+
+    $('btn-start-session').addEventListener('click', () => {
+      const userIntent = $('intent-text').value.trim();
+      if (!userIntent) { toast('방학 목표와 제약을 입력하세요.'); return; }
+      state.userIntent = userIntent;
+      showScreen('screen-profile');
+    });
+
+    /* ── Profile form ── */
+    function addEventRow() {
+      const row = document.createElement('div');
+      row.className = 'event-row';
+      row.innerHTML = '<input type="date" /><input type="text" class="event-desc" placeholder="행사·일정 설명" /><button type="button" class="event-remove">×</button>';
+      row.querySelector('.event-remove').addEventListener('click', () => row.remove());
+      $('fixed-events-list').appendChild(row);
+    }
+    $('btn-add-event').addEventListener('click', addEventRow);
+
+    document.querySelectorAll('.radio-group').forEach(group => {
+      group.querySelectorAll('.radio-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+        });
+      });
+    });
+    document.querySelectorAll('.check-group').forEach(group => {
+      group.querySelectorAll('.check-btn').forEach(btn => {
+        btn.addEventListener('click', () => btn.classList.toggle('selected'));
+      });
+    });
+
+    function getRadioValue(groupId) {
+      const sel = $(groupId) && $(groupId).querySelector('.radio-btn.selected');
+      return sel ? sel.dataset.value : '';
+    }
+    function getCheckValues(groupId) {
+      return [...($(groupId) ? $(groupId).querySelectorAll('.check-btn.selected') : [])].map(b => b.dataset.value);
+    }
+    function getFixedEvents() {
+      return [...$('fixed-events-list').querySelectorAll('.event-row')].map(row => {
+        const inputs = row.querySelectorAll('input');
+        return { date: inputs[0].value, description: inputs[1].value };
+      }).filter(e => e.date || e.description);
+    }
+
+    $('btn-submit-profile').addEventListener('click', async () => {
+      if (!$('p-consent').checked) { toast('동의 체크 후 진행해주세요.'); return; }
+      const profile = {
+        priority_1: $('p-priority1').value.trim(),
+        priority_2: $('p-priority2').value.trim(),
+        priority_3: $('p-priority3').value.trim(),
+        time_preference: getRadioValue('time-pref-group'),
+        work_hours_per_week: parseFloat($('p-work-hours').value) || 0,
+        work_days: getCheckValues('work-days-group'),
+        monthly_budget: parseInt($('p-budget').value) || 0,
+        fixed_events: getFixedEvents(),
+        forbidden_activities: $('p-forbidden').value.trim(),
+        health_constraints: getRadioValue('health-group') + ($('p-health-note').value.trim() ? ': ' + $('p-health-note').value.trim() : ''),
+        study_style: getRadioValue('study-style-group'),
+        commute_minutes: parseInt($('p-commute').value) || 0,
+        has_car: $('p-has-car').checked,
+        must_complete: $('p-must-complete').value.trim(),
+      };
+      $('btn-submit-profile').disabled = true;
+      try {
+        const sessionData = await api('/api/session/start', {
+          participant_id: state.participantId,
+          user_intent: state.userIntent,
+        });
+        state.sessionId = sessionData.session_id;
+        await api('/api/profile/submit', { session_id: state.sessionId, profile });
+        connectWs();
+        showScreen('screen-main');
+        appendMessage('assistant', '안녕하세요! 다음 방학 계획을 함께 세워보겠습니다. 달성하고 싶은 목표나 지켜야 할 제약 조건이 있다면 편하게 말씀해 주세요.');
+        $('chat-input').focus();
+      } catch (err) {
+        toast('시작 실패: ' + err.message);
+        $('btn-submit-profile').disabled = false;
+      }
+    });
+
+    /* ── typing indicator ── */
+    function showTyping() {
+      removeTyping();
+      const el = document.createElement('div');
+      el.id = 'typing-indicator';
+      el.className = 'typing-indicator';
+      el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+      $('messages').appendChild(el);
+      $('messages').scrollTop = $('messages').scrollHeight;
+    }
+    function removeTyping() {
+      const el = $('typing-indicator');
+      if (el) el.remove();
+    }
+
+    /* ── chat ── */
+    function appendMessage(role, text) {
+      const bubble = document.createElement('div');
+      bubble.className = `msg ${role}`;
+      bubble.textContent = text;
+      $('messages').appendChild(bubble);
+      $('messages').scrollTop = $('messages').scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = $('chat-input').value.trim();
+      if (!text || state.waiting) return;
+      state.waiting = true;
+      $('chat-input').value = '';
+      $('btn-send').disabled = true;
+      appendMessage('user', text);
+      showTyping();
+      try {
+        const data = await api('/api/message', {
+          session_id: state.sessionId,
+          user_message: text,
+        });
+        removeTyping();
+        appendMessage('assistant', data.assistant_message);
+        if (data.current_stage !== undefined) renderStage(data.current_stage, data.stage_gate_ready || false);
+      } catch (err) {
+        removeTyping();
+        toast('메시지 전송 실패: ' + err.message);
+      } finally {
+        state.waiting = false;
+        $('btn-send').disabled = false;
+        $('chat-input').focus();
+      }
+    }
+
+    $('btn-send').addEventListener('click', sendMessage);
+    $('chat-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+
+    /* ── websocket ── */
+    function connectWs() {
+      if (state.ws) state.ws.close();
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      state.ws = new WebSocket(`${proto}://${location.host}/ws/groundlens/${state.sessionId}`);
+      state.ws.onopen = () => {
+        state.ws._ping = setInterval(() => {
+          if (state.ws.readyState === WebSocket.OPEN) state.ws.send('ping');
+        }, 12000);
+      };
+      state.ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.event === 'e_updated') {
+          renderGroundLens(data);
+          if (data.current_stage !== undefined) renderStage(data.current_stage, data.stage_gate_ready || false);
+          if ($('screen-debug').classList.contains('active')) loadDebugData();
+        }
+      };
+      state.ws.onclose = () => {
+        if (state.ws && state.ws._ping) clearInterval(state.ws._ping);
+        if (state.sessionId) setTimeout(connectWs, 2500);
+      };
+    }
+
+    /* ── GroundLens rendering ── */
+    /* ── GL filter helpers ── */
+    function _turnOf(item) {
+      return parseInt(item.source_turn || item.first_turn || 0);
+    }
+
+    function updateFilterButtons(turns) {
+      const bar = $('gl-filter-bar');
+      const existing = new Set(
+        [...bar.querySelectorAll('.gl-filter-btn[data-turn]')].map(b => parseInt(b.dataset.turn))
+      );
+      [...turns].sort((a, b) => a - b).forEach(t => {
+        if (existing.has(t)) return;
+        const btn = document.createElement('button');
+        btn.className = 'gl-filter-btn';
+        btn.dataset.turn = t;
+        btn.dataset.filter = t;
+        btn.textContent = `(${t})`;
+        btn.addEventListener('click', () => setGlFilter(t));
+        bar.appendChild(btn);
+      });
+    }
+
+    function setGlFilter(f) {
+      state.glFilter = f;
+      refreshFilterUI();
+      renderFilteredDots();
+    }
+
+    function refreshFilterUI() {
+      $('gl-filter-bar').querySelectorAll('.gl-filter-btn').forEach(btn => {
+        const f = btn.dataset.filter;
+        const active = state.glFilter === 'all' ? f === 'all' : parseInt(f) === state.glFilter;
+        btn.classList.toggle('active', active);
+      });
+    }
+
+    function renderFilteredDots() {
+      const f = state.glFilter;
+      const common = f === 'all' ? state.allCommon : state.allCommon.filter(i => _turnOf(i) === f);
+      const llm    = f === 'all' ? state.allLlm    : state.allLlm.filter(i => _turnOf(i) === f);
+
+      $('cg-count').textContent       = `CG ${state.allCommon.length}`;
+      $('llm-count').textContent      = `LLM ${state.allLlm.length}`;
+      $('gl-total-badge').textContent = state.allCommon.length + state.allLlm.length;
+
+      clearDots();
+      adjustLlmHeights(llm);
+      common.forEach((item, i) => addDot($('cg-zone'),   item, i, state.newIds.has(item.id), false));
+      llm.forEach((item, i)    => addDot(zoneFor(item),  item, i, state.newIds.has(item.id), true));
+    }
+
+    $('gl-filter-all').addEventListener('click', () => setGlFilter('all'));
+
+    function renderGroundLens(data) {
+      const common = data.common_ground || [];
+      const llm    = data.llm_ground || [];
+      const delta  = new Set([
+        ...(data.common_ground_delta || []).map(i => i.id),
+        ...(data.llm_ground_delta    || []).map(i => i.id),
+      ]);
+
+      state.allCommon = common;
+      state.allLlm    = llm;
+      state.newIds    = delta;
+
+      // Auto-focus on the turn that just got new nodes
+      if (delta.size > 0 && data.turn > 0) state.glFilter = data.turn;
+
+      // Build turn set from all nodes
+      const turns = new Set([
+        ...common.map(_turnOf),
+        ...llm.map(_turnOf),
+      ].filter(t => t > 0));
+      updateFilterButtons(turns);
+
+      refreshFilterUI();
+      renderFilteredDots();
+    }
+
+    function clearDots() {
+      document.querySelectorAll('.dot').forEach(dot => dot.remove());
+      $('source-pop').style.display = 'none';
+      $('tooltip').style.display    = 'none';
+    }
+
+    function zoneFor(item) {
+      const content = item.content || '';
+      if (content.startsWith('구조적 결정')) return $('zone-struct');
+      if (content.startsWith('용어 해석'))   return $('zone-term');
+      const type = item.type || '';
+      if (type === '구조적 결정') return $('zone-struct');
+      if (type === '용어 해석')   return $('zone-term');
+      return $('zone-premise');
+    }
+
+    function adjustLlmHeights(items) {
+      const counts = { struct: 1, premise: 1, term: 1 };
+      items.forEach(item => {
+        const zone = zoneFor(item).id;
+        if (zone === 'zone-struct') counts.struct++;
+        else if (zone === 'zone-term') counts.term++;
+        else counts.premise++;
+      });
+      $('zone-struct').style.flex  = String(counts.struct);
+      $('zone-premise').style.flex = String(counts.premise);
+      $('zone-term').style.flex    = String(counts.term);
+    }
+
+    function addDot(container, item, index, isNew, draggable) {
+      const dot = document.createElement('div');
+      dot.className   = `dot${isNew ? ' new' : ''}`;
+      dot.draggable   = draggable;
+      dot.dataset.item = JSON.stringify(item);
+      const rect = container.getBoundingClientRect();
+      const cols = 5;
+      const row  = Math.floor(index / cols);
+      const col  = index % cols;
+      const x = 38 + col * Math.max(34, (rect.width - 76) / Math.max(cols - 1, 1));
+      const y = 52 + row * 34 + ((col % 2) * 13);
+      dot.style.left    = Math.min(Math.max(x, 22), Math.max(rect.width  - 22, 22)) + 'px';
+      dot.style.top     = Math.min(Math.max(y, 34), Math.max(rect.height - 22, 34)) + 'px';
+      dot.style.opacity = '0';
+      dot.style.transform = 'translate(-50%, -50%) scale(0)';
+      setTimeout(() => {
+        dot.style.opacity   = isNew ? '.80' : '.52';
+        dot.style.transform = 'translate(-50%, -50%) scale(1)';
+      }, index * 45);
+
+      const restOpacity = isNew ? '.80' : '.52';
+      dot.addEventListener('mouseenter', () => {
+        dot.style.transform = 'translate(-50%, -50%) scale(2.4)';
+        dot.style.opacity   = '0.94';
+        showTip(dot, item.content);
+      });
+      dot.addEventListener('mouseleave', () => {
+        dot.style.transform = 'translate(-50%, -50%) scale(1)';
+        dot.style.opacity   = restOpacity;
+        $('tooltip').style.display = 'none';
+      });
+      dot.addEventListener('dblclick', () => showSource(dot, item));
+      if (draggable) {
+        dot.addEventListener('dragstart', (event) => {
+          state.draggedItem = item;
+          dot.classList.add('edited');
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        dot.addEventListener('dragend', () => dot.classList.remove('edited'));
+        dot.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          state.ctxItem = item;
+          const menu = $('ctx-menu');
+          menu.style.left    = e.clientX + 'px';
+          menu.style.top     = e.clientY + 'px';
+          menu.style.display = 'block';
+        });
+      }
+      container.appendChild(dot);
+    }
+
+    function showTip(dot, text) {
+      const body = $('gl-body').getBoundingClientRect();
+      const rect = dot.getBoundingClientRect();
+      const tip  = $('tooltip');
+      tip.textContent = text;
+      tip.style.left  = Math.min(rect.left - body.left + 14, body.width - 284) + 'px';
+      tip.style.top   = Math.max(rect.top  - body.top  + 18, 8) + 'px';
+      tip.style.display = 'block';
+    }
+
+    async function showSource(dot, item) {
+      const pop  = $('source-pop');
+      const body = $('gl-body').getBoundingClientRect();
+      const rect = dot.getBoundingClientRect();
+      pop.style.left = Math.min(rect.left - body.left + 16, body.width - 354) + 'px';
+      pop.style.top  = Math.max(rect.top  - body.top  + 16, 12) + 'px';
+      $('source-text').textContent = '불러오는 중...';
+      pop.style.display = 'block';
+      try {
+        const res = await fetch(`/api/turn/${state.sessionId}/${item.source_turn || item.first_turn || 0}`);
+        if (!res.ok) throw new Error('not found');
+        const data = await res.json();
+        $('source-text').textContent = `사용자:\n${data.user_message}\n\n챗봇:\n${data.assistant_message}`;
+      } catch (_) {
+        $('source-text').textContent = '출처 대화를 찾을 수 없습니다.';
+      }
+    }
+
+    /* ── drag-to-correct ── */
+    $('cg-zone').addEventListener('dragover', (event) => {
+      if (!state.draggedItem) return;
+      event.preventDefault();
+      $('cg-zone').classList.add('drop-ready');
+    });
+    $('cg-zone').addEventListener('dragleave', () => $('cg-zone').classList.remove('drop-ready'));
+    $('cg-zone').addEventListener('drop', (event) => {
+      event.preventDefault();
+      $('cg-zone').classList.remove('drop-ready');
+      if (!state.draggedItem) return;
+      const body = $('gl-body').getBoundingClientRect();
+      state.correctionPoint = {
+        x: event.clientX - body.left,
+        y: event.clientY - body.top,
+        item: state.draggedItem,
+      };
+      state.draggedItem = null;
+      openCorrectionPop();
+    });
+
+    function openCorrectionPop() {
+      const point = state.correctionPoint;
+      const pop   = $('correction-pop');
+      pop.style.left = Math.min(point.x + 12, $('gl-body').clientWidth - 354) + 'px';
+      pop.style.top  = Math.max(point.y + 12, 12) + 'px';
+      $('correction-text').value = point.item.content || '';
+      pop.style.display = 'block';
+      $('correction-text').focus();
+    }
+
+    /* ── delete ── */
+    $('ctx-delete').addEventListener('click', async () => {
+      $('ctx-menu').style.display = 'none';
+      if (!state.ctxItem) return;
+      const item = state.ctxItem;
+      state.ctxItem = null;
+      try {
+        const data = await api('/api/ground/delete', {
+          session_id: state.sessionId,
+          item_id: item.id,
+        });
+        renderGroundLens({
+          common_ground: data.common_ground,
+          llm_ground:    data.llm_ground,
+          common_ground_delta: [],
+          llm_ground_delta:    [],
+          turn: 0,
+        });
+        toast('항목이 삭제되었습니다.');
+      } catch (err) {
+        toast('삭제 실패: ' + err.message);
+      }
+    });
+
+    /* ── global dismiss handlers ── */
+    document.addEventListener('click', (e) => {
+      if ($('ctx-menu').style.display !== 'none' && !$('ctx-menu').contains(e.target)) {
+        $('ctx-menu').style.display = 'none';
+        state.ctxItem = null;
+      }
+      const pop = $('source-pop');
+      if (pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.closest('.dot')) {
+        pop.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        $('source-pop').style.display     = 'none';
+        $('correction-pop').style.display = 'none';
+        $('ctx-menu').style.display       = 'none';
+        $('tooltip').style.display        = 'none';
+        state.correctionPoint = null;
+        state.ctxItem = null;
+      }
+    });
+
+    /* ── correction submit ── */
+    $('btn-cancel-correction').addEventListener('click', () => {
+      $('correction-pop').style.display = 'none';
+      state.correctionPoint = null;
+    });
+
+    $('btn-submit-correction').addEventListener('click', async () => {
+      if (!state.correctionPoint) return;
+      const text = $('correction-text').value.trim();
+      if (!text) { toast('수정 내용을 입력하세요.'); return; }
+      try {
+        const data = await api('/api/ground/correct', {
+          session_id:     state.sessionId,
+          target_item_id: state.correctionPoint.item.id,
+          correction_text: text,
+        });
+        $('correction-pop').style.display = 'none';
+        renderGroundLens({
+          common_ground: data.common_ground,
+          llm_ground:    data.llm_ground,
+          common_ground_delta: data.common_ground.slice(-1),
+          llm_ground_delta:    [],
+          turn: 0,
+        });
+        state.correctionPoint = null;
+      } catch (err) {
+        toast('수정 실패: ' + err.message);
+      }
+    });
+
+    /* ── debug screen ── */
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const EV_CONFIG = {
+      direct_statement: { label: 'direct',      cls: 'ev-direct'     },
+      approval:         { label: 'approval',    cls: 'ev-approval'   },
+      correction:       { label: 'correction',  cls: 'ev-correction' },
+      subsequent_use:   { label: 'sub.use',     cls: 'ev-subsequent' },
+      interface_action: { label: 'interface',   cls: 'ev-interface'  },
+    };
+
+    function evBadge(type) {
+      const cfg = EV_CONFIG[type] || { label: type, cls: '' };
+      return `<span class="ev-badge ${cfg.cls}">${escHtml(cfg.label)}</span>`;
+    }
+
+    async function openDebug() {
+      if (!state.sessionId) { toast('세션을 먼저 시작하세요.'); return; }
+      showScreen('screen-debug');
+      await loadDebugData();
+    }
+
+    function closeDebug() {
+      showScreen('screen-main');
+    }
+
+    async function loadDebugData() {
+      try {
+        const res = await fetch(`/api/debug/${state.sessionId}`);
+        if (!res.ok) throw new Error('not found');
+        const data = await res.json();
+        state.lastDebugData = data;
+        renderDebugData(data);
+      } catch (_) {
+        $('debug-body').innerHTML = '<p class="debug-empty" style="text-align:center;padding:60px 0">데이터를 불러올 수 없습니다.</p>';
+      }
+    }
+
+    function renderDebugData(data) {
+      const F           = data.F || [];
+      const CG          = data.common_ground || [];
+      const LLM         = data.llm_ground || [];
+      const corrections = data.grounding_corrections || [];
+      const deletions   = data.llm_ground_deletions || [];
+      const turn        = data.current_turn ?? '?';
+      const sid         = (data.session_id || state.sessionId || '').slice(0, 12);
+
+      $('debug-meta').textContent = `Turn ${turn}  ·  ${sid}…`;
+
+      /* F_t */
+      const fHtml = F.length === 0
+        ? '<p class="debug-empty">없음</p>'
+        : F.map(item => {
+            const premise = typeof item === 'string' ? item : (item.premise || '');
+            const evs     = typeof item === 'string' ? ['direct_statement'] : (item.evidence_type || []);
+            return `<div class="f-item">
+              <div class="f-bullet"></div>
+              <span class="f-premise">${escHtml(premise)}</span>
+              <span class="ev-badges">${evs.map(evBadge).join('')}</span>
+            </div>`;
+          }).join('');
+
+      /* Common Ground */
+      const cgHtml = CG.length === 0
+        ? '<p class="debug-empty">없음</p>'
+        : CG.map(item => `<div class="debug-item">
+            ${escHtml(item.content || '')}
+            <div class="debug-item-meta">
+              <span>turn ${item.first_turn ?? item.source_turn ?? '?'}</span>
+              ${(item.evidence_type || []).map(evBadge).join('')}
+            </div>
+          </div>`).join('');
+
+      /* LLM Ground by sub-zone */
+      const zones = { '구조적 결정': [], '암묵적 전제': [], '용어 해석': [] };
+      LLM.forEach(item => {
+        const c = item.content || '';
+        const z = c.startsWith('구조적 결정') ? '구조적 결정'
+                : c.startsWith('용어 해석')   ? '용어 해석'
+                : '암묵적 전제';
+        zones[z].push(item);
+      });
+      const llmHtml = LLM.length === 0
+        ? '<p class="debug-empty">없음</p>'
+        : Object.entries(zones).map(([label, items]) =>
+            items.length === 0 ? '' :
+            `<div class="debug-subzone-label">${label} (${items.length})</div>` +
+            items.map(item => `<div class="debug-item">
+              ${escHtml(item.content || '')}
+              <div class="debug-item-meta">turn ${item.source_turn ?? '?'}</div>
+            </div>`).join('')
+          ).join('');
+
+      /* Corrections */
+      const corrHtml = corrections.length === 0
+        ? '<p class="debug-empty">없음</p>'
+        : corrections.map(c => `<div class="debug-correction-item">
+            ${escHtml(c.content || '')}
+            <div class="debug-item-meta">turn ${c.source_turn} → corrected at ${c.corrected_at_turn}</div>
+          </div>`).join('');
+
+      /* Deletions */
+      const delHtml = deletions.length === 0
+        ? '<p class="debug-empty">없음</p>'
+        : deletions.map(d => `<div class="debug-deletion-item">
+            ${escHtml(d.content || '')}
+            <div class="debug-item-meta">turn ${d.source_turn} → deleted at ${d.deleted_at_turn}</div>
+          </div>`).join('');
+
+      $('debug-body').innerHTML = `
+        <div class="debug-card">
+          <div class="debug-card-head">
+            <span class="debug-card-title">F — Commitment Baseline</span>
+            <span class="debug-count">${F.length}</span>
+          </div>
+          ${fHtml}
+        </div>
+        <div class="debug-grid-2">
+          <div class="debug-card">
+            <div class="debug-card-head">
+              <span class="debug-card-title">Common Ground</span>
+              <span class="debug-count">${CG.length}</span>
+            </div>
+            ${cgHtml}
+          </div>
+          <div class="debug-card">
+            <div class="debug-card-head">
+              <span class="debug-card-title">LLM Ground</span>
+              <span class="debug-count">${LLM.length}</span>
+            </div>
+            ${llmHtml}
+          </div>
+        </div>
+        <div class="debug-grid-2">
+          <div class="debug-card">
+            <div class="debug-card-head">
+              <span class="debug-card-title">Grounding Corrections</span>
+              <span class="debug-count">${corrections.length}</span>
+            </div>
+            ${corrHtml}
+          </div>
+          <div class="debug-card">
+            <div class="debug-card-head">
+              <span class="debug-card-title">Deleted Items</span>
+              <span class="debug-count">${deletions.length}</span>
+            </div>
+            ${delHtml}
+          </div>
+        </div>`;
+    }
+
+    $('btn-debug').addEventListener('click', openDebug);
+    $('btn-debug-back').addEventListener('click', closeDebug);
+    $('btn-debug-refresh').addEventListener('click', loadDebugData);
+  </script>
+</body>
+</html>
