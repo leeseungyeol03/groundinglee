@@ -108,6 +108,22 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            -- 요구사항 변경 (2단계 과업의 조작, 논문 6.5절)
+            -- 주입과 달리 세션당 1건이며 제시 시점이 결정적이다.
+            CREATE TABLE IF NOT EXISTS requirement_changes (
+                change_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL REFERENCES sessions(session_id),
+                change_type TEXT NOT NULL,
+                label TEXT NOT NULL,
+                text TEXT NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                profile_field TEXT,
+                assigned_by TEXT,
+                delivered_at_turn INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS injections (
                 injection_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL REFERENCES sessions(session_id),
@@ -143,6 +159,8 @@ def init_db() -> None:
             ("turn_in_stage",  "INTEGER NOT NULL DEFAULT 0"),
             ("revision_count", "INTEGER NOT NULL DEFAULT 0"),
             ("session_type",   "TEXT NOT NULL DEFAULT 'gl'"),
+            # 과업 단계: 1 = 계획 수립, 2 = 요구사항 변경 후 개정 (논문 6.3절)
+            ("task_phase",     "INTEGER NOT NULL DEFAULT 1"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {definition}")

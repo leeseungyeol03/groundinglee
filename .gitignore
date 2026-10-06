@@ -6,6 +6,7 @@ __pycache__/
 venv/
 env/
 *.egg-info/
+.runtime/
 
 # Environment / secrets
 .env
@@ -30,3 +31,4 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.models/

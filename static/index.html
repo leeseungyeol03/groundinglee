@@ -1155,6 +1155,10 @@
           </div>
         </div>
       </div>
+      <div id="gl-baseline" class="gl-baseline" style="display:none;padding:14px 16px;overflow-y:auto">
+        <div class="zone-title">AI가 참고 중인 전제</div>
+        <ul id="gl-baseline-list" style="list-style:disc;margin:8px 0 0;padding-left:20px"></ul>
+      </div>
     </aside>
   </section>
 
@@ -1186,6 +1190,7 @@
     const state = {
       participantId: '',
       sessionId: '',
+      sessionType: 'gl',
       ws: null,
       waiting: false,
       draggedItem: null,
@@ -1199,6 +1204,7 @@
       allLlm: [],
       newIds: new Set(),
       glFilter: 'all',
+      lastHttpRenderTurn: 0,  // highest turn already rendered by HTTP response
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1357,11 +1363,15 @@
       };
       $('btn-submit-profile').disabled = true;
       try {
+        const condParam = new URLSearchParams(location.search).get('cond');
+        const cond = ['gl', 'gl_view', 'baseline'].includes(condParam) ? condParam : 'gl';
         const sessionData = await api('/api/session/start', {
           participant_id: state.participantId,
           user_intent: state.userIntent,
+          session_type: cond,
         });
         state.sessionId = sessionData.session_id;
+        state.sessionType = sessionData.session_type || cond;
         await api('/api/profile/submit', { session_id: state.sessionId, profile });
         connectWs();
         showScreen('screen-main');
@@ -1413,6 +1423,19 @@
         removeTyping();
         appendMessage('assistant', data.assistant_message);
         if (data.current_stage !== undefined) renderStage(data.current_stage, data.stage_gate_ready || false);
+        // Update GL directly from HTTP response — guarantees update even when WS push is dropped
+        renderGroundLens({
+          event: 'e_updated',
+          turn: data.turn || 0,
+          common_ground: data.common_ground || [],
+          llm_ground: data.llm_ground || [],
+          common_ground_delta: data.common_ground_delta || [],
+          llm_ground_delta: data.llm_ground_delta || [],
+          current_stage: data.current_stage,
+          stage_gate_ready: data.stage_gate_ready || false,
+        });
+        // Mark this turn as rendered so the WS handler can skip the duplicate push
+        state.lastHttpRenderTurn = Math.max(state.lastHttpRenderTurn, data.turn || 0);
       } catch (err) {
         removeTyping();
         toast('메시지 전송 실패: ' + err.message);
@@ -1433,25 +1456,34 @@
 
     /* ── websocket ── */
     function connectWs() {
-      if (state.ws) state.ws.close();
+      const prevWs = state.ws;
+      if (prevWs) prevWs.close();
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      state.ws = new WebSocket(`${proto}://${location.host}/ws/groundlens/${state.sessionId}`);
-      state.ws.onopen = () => {
-        state.ws._ping = setInterval(() => {
-          if (state.ws.readyState === WebSocket.OPEN) state.ws.send('ping');
+      const ws = new WebSocket(`${proto}://${location.host}/ws/groundlens/${state.sessionId}`);
+      state.ws = ws;
+      ws.onopen = () => {
+        ws._ping = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send('ping');
         }, 12000);
       };
-      state.ws.onmessage = (event) => {
+      ws.onmessage = (event) => {
+        // Ignore messages from a WS that is no longer the active connection
+        if (state.ws !== ws) return;
         const data = JSON.parse(event.data);
         if (data.event === 'e_updated') {
-          renderGroundLens(data);
+          // Skip GL render if HTTP response already rendered this turn (prevents stale WS overwrite)
+          const wsTurn = typeof data.turn === 'number' ? data.turn : 0;
+          if (wsTurn <= 0 || wsTurn > state.lastHttpRenderTurn) {
+            renderGroundLens(data);
+          }
           if (data.current_stage !== undefined) renderStage(data.current_stage, data.stage_gate_ready || false);
           if ($('screen-debug').classList.contains('active')) loadDebugData();
         }
       };
-      state.ws.onclose = () => {
-        if (state.ws && state.ws._ping) clearInterval(state.ws._ping);
-        if (state.sessionId) setTimeout(connectWs, 2500);
+      ws.onclose = () => {
+        if (ws._ping) clearInterval(ws._ping);
+        // Only schedule reconnect for the currently-active WS; a replaced WS must not re-fire
+        if (state.ws === ws && state.sessionId) setTimeout(connectWs, 2500);
       };
     }
 
@@ -1503,8 +1535,10 @@
 
       clearDots();
       adjustLlmHeights(llm);
+      // GL-view: 동일한 패널·점 표현·호버·provenance를 제공하되 노드 조작만 비활성 (논문 6.3절)
+      const canManipulate = state.sessionType === 'gl';
       common.forEach((item, i) => addDot($('cg-zone'),   item, i, state.newIds.has(item.id), false));
-      llm.forEach((item, i)    => addDot(zoneFor(item),  item, i, state.newIds.has(item.id), true));
+      llm.forEach((item, i)    => addDot(zoneFor(item),  item, i, state.newIds.has(item.id), canManipulate));
     }
 
     $('gl-filter-all').addEventListener('click', () => setGlFilter('all'));
@@ -1512,17 +1546,18 @@
     function renderGroundLens(data) {
       const common = data.common_ground || [];
       const llm    = data.llm_ground || [];
+      if (state.sessionType === 'baseline') { renderBaselineList(common, llm); return; }
+      applyViewOnlyNotice();
       const delta  = new Set([
         ...(data.common_ground_delta || []).map(i => i.id),
         ...(data.llm_ground_delta    || []).map(i => i.id),
       ]);
 
+      console.log('[GL] renderGroundLens turn=%s cg=%d llm=%d filter=%s', data.turn, common.length, llm.length, state.glFilter);
+
       state.allCommon = common;
       state.allLlm    = llm;
       state.newIds    = delta;
-
-      // Auto-focus on the turn that just got new nodes
-      if (delta.size > 0 && data.turn > 0) state.glFilter = data.turn;
 
       // Build turn set from all nodes
       const turns = new Set([
@@ -1533,6 +1568,42 @@
 
       refreshFilterUI();
       renderFilteredDots();
+    }
+
+    /* GL-view에서 패널이 열람 전용임을 한 번만 표기한다.
+       주입 노드에 정답 신호를 주지 않기 위해 개별 노드에는 아무 표시도 하지 않는다. */
+    function applyViewOnlyNotice() {
+      if (state.sessionType !== 'gl_view') return;
+      if (document.getElementById('gl-viewonly-note')) return;
+      const note = document.createElement('div');
+      note.id = 'gl-viewonly-note';
+      note.textContent = '열람 전용 — 수정이 필요하면 대화로 알려주세요';
+      note.style.cssText = [
+        'margin:0 16px 8px', 'padding:7px 11px', 'border-radius:9px',
+        'font-size:11.5px', 'letter-spacing:-.1px',
+        'background:rgba(255,255,255,.26)', 'color:var(--ink-soft)',
+        'border:1px solid rgba(255,255,255,.34)', 'text-align:center',
+      ].join(';');
+      const bar = $('gl-filter-bar');
+      bar.parentNode.insertBefore(note, bar.nextSibling);
+    }
+
+    function renderBaselineList(common, llm) {
+      $('gl-filter-bar').style.display = 'none';
+      $('gl-body').style.display = 'none';
+      const countsEl = document.querySelector('#gl-popup .counts');
+      if (countsEl) countsEl.style.display = 'none';
+      $('gl-baseline').style.display = 'block';
+      const listEl = $('gl-baseline-list');
+      listEl.innerHTML = '';
+      [...common, ...llm].forEach(item => {
+        const content = String(item.content || '').replace(/^\s*(구조적 결정|암묵적 전제|용어 해석)\s*[:：]?\s*/, '');
+        if (!content) return;
+        const li = document.createElement('li');
+        li.textContent = content;
+        li.style.margin = '6px 0';
+        listEl.appendChild(li);
+      });
     }
 
     function clearDots() {
@@ -1653,6 +1724,7 @@
     $('cg-zone').addEventListener('drop', (event) => {
       event.preventDefault();
       $('cg-zone').classList.remove('drop-ready');
+      if (state.sessionType !== 'gl') { state.draggedItem = null; return; }
       if (!state.draggedItem) return;
       const body = $('gl-body').getBoundingClientRect();
       state.correctionPoint = {
@@ -1677,6 +1749,7 @@
     /* ── delete ── */
     $('ctx-delete').addEventListener('click', async () => {
       $('ctx-menu').style.display = 'none';
+      if (state.sessionType !== 'gl') { state.ctxItem = null; return; }
       if (!state.ctxItem) return;
       const item = state.ctxItem;
       state.ctxItem = null;
@@ -1728,6 +1801,7 @@
     });
 
     $('btn-submit-correction').addEventListener('click', async () => {
+      if (state.sessionType !== 'gl') { state.correctionPoint = null; return; }
       if (!state.correctionPoint) return;
       const text = $('correction-text').value.trim();
       if (!text) { toast('수정 내용을 입력하세요.'); return; }

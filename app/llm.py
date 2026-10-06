@@ -7,15 +7,25 @@ from typing import Any
 
 
 def is_mock() -> bool:
-    return os.environ.get("MOCK_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("MOCK_LLM", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_api_key() -> str:
+    """Anthropic API 키를 반환한다.
+
+    .env의 키 이름이 `Anthropic_API_KEY`라 표준 명칭과 대소문자가 다르므로
+    둘 다 허용한다.
+    """
+    for name in ("ANTHROPIC_API_KEY", "Anthropic_API_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _make_client():
-    from openai import OpenAI
-    return OpenAI(
-        base_url="https://sam.soonsoon.ai/openai/v1",
-        api_key=os.environ.get("SAM_API_KEY", ""),
-    )
+    import anthropic
+    return anthropic.Anthropic(api_key=get_api_key())
 
 
 @dataclass
@@ -53,13 +63,17 @@ def get_assistant_response(
 
     model = str(cfg.get("model"))
     max_tokens = int(cfg.get("max_tokens", 4096))
-    messages = [{"role": "system", "content": system_prompt}, *history]
-    response = _make_client().chat.completions.create(
+    temperature = float(cfg.get("temperature", 1.0))
+    # anthropic SDK 1.7.0은 temperature를 상위 인자에서 제거했지만
+    # API 자체는 여전히 수용한다. 재현성을 위해 extra_body로 명시한다.
+    response = _make_client().messages.create(
         model=model,
         max_tokens=max_tokens,
-        messages=messages,
+        system=system_prompt,
+        messages=[{"role": m["role"], "content": m["content"]} for m in history],
+        extra_body={"temperature": temperature},
     )
-    text = response.choices[0].message.content or ""
+    text = "".join(b.text for b in response.content if b.type == "text")
     return AssistantResult(text=text, thinking="")
 
 
@@ -79,12 +93,15 @@ def get_probe_response(
         )
         return ProbeResult(json.loads(raw), raw)
 
-    response = _make_client().chat.completions.create(
+    response = _make_client().messages.create(
         model=str(cfg.get("model")),
         max_tokens=512,
-        messages=[*history, {"role": "user", "content": probe_prompt}],
+        messages=[
+            *({"role": m["role"], "content": m["content"]} for m in history),
+            {"role": "user", "content": probe_prompt},
+        ],
     )
-    raw = response.choices[0].message.content or ""
+    raw = "".join(b.text for b in response.content if b.type == "text")
     clean = raw.strip()
     if clean.startswith("```"):
         clean = "\n".join(clean.splitlines()[1:]).rstrip("`").strip()

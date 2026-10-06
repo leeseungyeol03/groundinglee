@@ -24,7 +24,7 @@ from app.database import (
 from app.graph import initial_state, run_correction_graph, run_deletion_graph, run_message_graph
 from app.ws import build_update_payload, manager, router as ws_router, set_event_loop
 
-load_dotenv(override=False)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = ROOT_DIR / "static"
@@ -68,15 +68,26 @@ def config_public():
     }
 
 
+# 실험 조건 (논문 6.3절)
+#   gl      = GL-full : 패널 + 노드 조작(승격·수정·거부). 인터페이스 증거 채널 있음
+#   gl_view = GL-view : 동일 패널, 조작만 비활성. 교정은 대화 채널로만 가능
+#   baseline          : 검증 상태 구분 없는 단일 텍스트 목록 (탐색용, 확증 비교 대상 아님)
+SESSION_TYPES = {"gl", "gl_view", "baseline"}
+
+# 노드 조작이 허용되는 조건. 이 집합 밖의 세션은 correct/delete를 거부한다.
+INTERACTIVE_SESSION_TYPES = {"gl"}
+
+
 class StartSessionRequest(BaseModel):
     participant_id: str
     user_intent: str
     paper_id: str | None = None
-    session_type: str = "gl"  # 'gl' | 'baseline'
+    session_type: str = "gl"  # 'gl' | 'gl_view' | 'baseline'
 
 
 class StartSessionResponse(BaseModel):
     session_id: str
+    session_type: str
 
 
 @app.post("/api/session/start", response_model=StartSessionResponse)
@@ -87,6 +98,11 @@ def start_session(req: StartSessionRequest):
         raise HTTPException(status_code=400, detail="participant_id is required")
     if not user_intent:
         raise HTTPException(status_code=400, detail="user_intent is required")
+    if req.session_type not in SESSION_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"session_type must be one of {sorted(SESSION_TYPES)}",
+        )
 
     cfg = load_config()
     session_id = uuid.uuid4().hex
@@ -116,7 +132,7 @@ def start_session(req: StartSessionRequest):
         conn.commit()
     finally:
         conn.close()
-    return StartSessionResponse(session_id=session_id)
+    return StartSessionResponse(session_id=session_id, session_type=req.session_type)
 
 
 class MessageRequest(BaseModel):
@@ -128,6 +144,12 @@ class MessageResponse(BaseModel):
     assistant_message: str
     current_stage: str
     stage_gate_ready: bool
+    # GL state included so the frontend can update even if the WS push is missed
+    turn: int = 0
+    common_ground: list = []
+    llm_ground: list = []
+    common_ground_delta: list = []
+    llm_ground_delta: list = []
 
 
 @app.post("/api/message", response_model=MessageResponse)
@@ -219,11 +241,17 @@ def post_message(req: MessageRequest):
     finally:
         conn.close()
 
-    manager.push(req.session_id, build_update_payload(previous, next_state))
+    payload = build_update_payload(previous, next_state)
+    manager.push(req.session_id, payload)
     return MessageResponse(
         assistant_message=next_state.get("D_t", ""),
         current_stage=next_state.get("current_stage", "S1"),
         stage_gate_ready=bool(next_state.get("stage_gate_ready", False)),
+        turn=payload["turn"],
+        common_ground=payload["common_ground"],
+        llm_ground=payload["llm_ground"],
+        common_ground_delta=payload["common_ground_delta"],
+        llm_ground_delta=payload["llm_ground_delta"],
     )
 
 
@@ -241,7 +269,8 @@ def correct_ground(req: CorrectionRequest):
 
     conn = get_connection()
     try:
-        _get_session(conn, req.session_id)
+        session = _get_session(conn, req.session_id)
+        _require_interactive(session)
         previous = load_latest_state(conn, req.session_id)
         if previous is None:
             raise HTTPException(status_code=404, detail="GroundLens state not found")
@@ -293,7 +322,8 @@ class DeleteRequest(BaseModel):
 def delete_ground(req: DeleteRequest):
     conn = get_connection()
     try:
-        _get_session(conn, req.session_id)
+        session = _get_session(conn, req.session_id)
+        _require_interactive(session)
         previous = load_latest_state(conn, req.session_id)
         if previous is None:
             raise HTTPException(status_code=404, detail="GroundLens state not found")
@@ -399,6 +429,98 @@ def submit_profile(req: ProfileSubmitRequest):
     return {"profile_id": profile_id}
 
 
+class Phase2Request(BaseModel):
+    session_id: str
+    participant_index: int = 0   # 배정표 순환용
+    condition_index: int = 0    # 0 = 첫 번째 조건, 1 = 두 번째 조건
+
+
+@app.post("/api/phase2/start")
+def start_phase2(req: Phase2Request):
+    """2단계 전환 — 요구사항 변경을 생성해 참가자에게 전달한다(논문 6.3·6.5절).
+
+    변경 문구는 참가자가 1단계에서 제시한 값을 채워 넣어 구성하므로
+    프로필이 먼저 저장되어 있어야 한다.
+
+    이 엔드포인트는 파트너 LLM의 프롬프트를 건드리지 않는다. 변경은
+    사용자 대면 지시문이며, 참가자가 그것을 대화·인터페이스로 어떻게
+    반영하는지가 측정 대상이다.
+    """
+    from app.requirement_change import select_change
+
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT task_phase FROM sessions WHERE session_id = ?", (req.session_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        if int(row[0] or 1) >= 2:
+            raise HTTPException(status_code=409, detail="already in phase 2")
+
+        prof = conn.execute(
+            """
+            SELECT priority_1, priority_2, monthly_budget, work_days
+            FROM constraint_profiles WHERE session_id = ?
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (req.session_id,),
+        ).fetchone()
+        if prof is None:
+            raise HTTPException(status_code=400, detail="profile required before phase 2")
+
+        profile = {
+            "priority_1": prof[0] or "",
+            "priority_2": prof[1] or "",
+            "monthly_budget": int(prof[2] or 0),
+            "work_days": json.loads(prof[3] or "[]"),
+        }
+        try:
+            change = select_change(req.participant_index, req.condition_index, profile)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        previous = load_latest_state(conn, req.session_id)
+        if previous is None:
+            raise HTTPException(status_code=404, detail="State not found")
+        turn = int(previous.get("current_turn", 0))
+
+        conn.execute(
+            """
+            INSERT INTO requirement_changes(
+                change_id, session_id, change_type, label, text,
+                old_value, new_value, profile_field, assigned_by,
+                delivered_at_turn, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex, req.session_id, change["change_type"],
+                change["label"], change["text"], change["old_value"],
+                change["new_value"], change["profile_field"],
+                change.get("assigned_by", "table"), turn, now_iso(),
+            ),
+        )
+
+        next_state = dict(previous)
+        next_state["task_phase"] = 2
+        next_state["requirement_change"] = change
+        conn.execute(
+            "UPDATE sessions SET task_phase = 2 WHERE session_id = ?", (req.session_id,)
+        )
+        insert_state(conn, req.session_id, turn, next_state)
+        conn.commit()
+    finally:
+        conn.close()
+
+    manager.push(req.session_id, build_update_payload(previous, next_state))
+    return {
+        "task_phase": 2,
+        "change_type": change["change_type"],
+        "label": change["label"],
+        "text": change["text"],
+    }
+
+
 class StageAdvanceRequest(BaseModel):
     session_id: str
     to_stage: str  # 'S2' | 'S3' | 'done'
@@ -447,6 +569,10 @@ def debug_session(session_id: str):
             "session_id": session_id,
             "current_turn": st.get("current_turn", 0),
             "current_stage": st.get("current_stage", "S1"),
+            # A안(2단계 과업)의 핵심 상태 — 개정 전파 분석에 필요하다
+            "task_phase": st.get("task_phase", 1),
+            "requirement_change": st.get("requirement_change", {}),
+            "plan_fields": st.get("plan_fields", []),
             "turn_in_stage": st.get("turn_in_stage", 0),
             "revision_count": st.get("revision_count", 0),
             "stage_gate_ready": st.get("stage_gate_ready", False),
@@ -465,6 +591,21 @@ def _get_session(conn, session_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return row
+
+
+def _require_interactive(session) -> None:
+    """노드 조작 허용 조건인지 검사한다.
+
+    GL-view는 '동일한 가시화, 개입 채널만 없음'이 조건 정의이므로(논문 6.3절),
+    조작 엔드포인트를 서버에서 막아야 조건이 보장된다. 프론트엔드 비활성화만으로는
+    직접 요청을 차단하지 못해 조건 간 차이가 오염될 수 있다.
+    """
+    session_type = session["session_type"] if "session_type" in session.keys() else "gl"
+    if session_type not in INTERACTIVE_SESSION_TYPES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"node manipulation is disabled for session_type='{session_type}'",
+        )
 
 
 def _select_all(conn, sql: str, session_id: str) -> list[dict[str, Any]]:
