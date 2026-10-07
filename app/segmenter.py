@@ -126,7 +126,7 @@ def segment(text: str, turn: int = 0) -> list[Segment]:
             index=idx,
             text=content,
             kind=kind,
-            path=" > ".join(path_stack),
+            path=" > ".join(p for p in path_stack if p),
             turn=turn,
             start=start,
             end=end,
@@ -179,7 +179,13 @@ def segment(text: str, turn: int = 0) -> list[Segment]:
             flush_paragraph()
             level = len(m.group(1))
             title = _clean(m.group(2))
+            # 제목 레벨을 스택 위치로 쓴다. 단순히 append하면 문서에 레벨 1이
+            # 없을 때 첫 레벨 2 제목이 인덱스 0을 차지해, 다음 레벨 2 제목이
+            # 그 하위로 들어간다("1. 목표 > 2. 주차별 일정").
+            # 경로는 귀속 정확도 측정에 쓰이므로 틀리면 수치가 부풀려진다.
             del path_stack[level - 1:]
+            while len(path_stack) < level - 1:
+                path_stack.append("")
             path_stack.append(title)
             if title:
                 _add(title, "heading",
