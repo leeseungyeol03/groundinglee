@@ -78,6 +78,33 @@ class BehaviorTester:
             msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
 
+    def generate(
+        self,
+        messages: list[dict],
+        system: str | None = None,
+        max_new_tokens: int = 900,
+    ) -> str:
+        """파트너 응답을 생성한다. 채점과 같은 모델이어야 로그확률이 의미를 갖는다.
+
+        greedy 고정. 생성 편차가 조건 간 비교를 오염시키면 안 된다.
+        """
+        torch = self.torch
+        msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
+        text = self.tokenizer.apply_chat_template(
+            msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        )
+        ids = self.tokenizer(text, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            out = self.model.generate(
+                **ids,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+            )
+        return self.tokenizer.decode(
+            out[0][ids["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+
     def score_segments(
         self,
         messages: list[dict],
