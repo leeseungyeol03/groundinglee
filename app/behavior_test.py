@@ -138,10 +138,27 @@ class BehaviorTester:
         with torch.no_grad():
             logits = self.model(input_ids).logits
 
-        # 다음 토큰 예측이므로 한 칸 민다
-        logprobs_all = torch.log_softmax(logits[0, :-1].float(), dim=-1)
+        # 다음 토큰 예측이므로 한 칸 민다.
+        #
+        # log_softmax를 전체 시퀀스에 한 번에 걸면 [L, V] float32 텐서가 두 개
+        # 뜨다. 어휘가 15만이라 L=4000이면 2.4GB씩, 모델 16.8GB를 올린
+        # 24GB 카드에서 OOM이 난다. 실제로 하루에 터졌다.
+        #
+        # cross_entropy는 정답 토큰의 음의 로그확률을 바로 내주고 분포를
+        # 재료화하지 않는다. 청크로 나눔 것까지 하면 최대 메모리가
+        # chunk × V로 제한된다.
         targets = input_ids[0, 1:]
-        token_lp = logprobs_all.gather(1, targets.unsqueeze(1)).squeeze(1)
+        shifted = logits[0, :-1]
+        parts = []
+        chunk = 512
+        for i in range(0, shifted.shape[0], chunk):
+            part = shifted[i:i + chunk].float()
+            tgt = targets[i:i + chunk]
+            parts.append(-torch.nn.functional.cross_entropy(
+                part, tgt, reduction="none"))
+            del part
+        token_lp = torch.cat(parts) if parts else torch.empty(0, device=self.device)
+        del logits, shifted, parts
 
         # 응답 토큰 j (0-based) 의 로그확률은 token_lp[n_prompt - 1 + j]
         out: dict[str, ScoredSegment] = {}

@@ -25,6 +25,7 @@ E2는 "처리(P1·P2·P3)가 메모리식 편집보다 낫다"를 사람 없이 
 from __future__ import annotations
 
 import json
+from app.usage_meter import METER
 import os
 import random
 import re
@@ -145,7 +146,8 @@ PERSONAS: list[Persona] = [
         change_type="priority_flip",
         change_utterance="생각해보니 기사 시험이 훨씬 급해. 토익은 다음 학기로 미룰게.",
         change_implies=["정보처리기사가 1순위다", "토익은 이번 방학에 하지 않는다"],
-        change_invalidates=["토익 850점을 이번 방학에 달성한다"],
+        change_invalidates=["토익 850점 이상을 목표로 한다",
+                            "영어 회화 스터디에 꾸준히 나간다"],
     ),
     Persona(
         id="plan_fitness",
@@ -169,9 +171,13 @@ PERSONAS: list[Persona] = [
             "빡세지 않게": "하루에 운동과 공부를 합쳐 네 시간을 넘기지 않는다",
         },
         change_type="resource_cut",
-        change_utterance="예산이 줄어서 헬스장은 못 끊을 것 같아. 10만원 안에서 해결해야 해.",
+        change_utterance="예산이 줄어서 헬스장은 못 끕을 것 같아. 10만원 안에서 해결해야 해.",
         change_implies=["예산은 10만원이다", "헬스장을 등록하지 않는다"],
-        change_invalidates=["헬스장에 주 4회 간다"],
+        # 무효화 목록은 빠짐없어야 한다. 예산 항목을 빼먹었더니 프로필에
+        # "예산 25만원"과 "예산 10만원"이 동시에 남아 시뮬레이터가 자기
+        # 변경을 되돌렸다(패널에서 "헬스장을 등록한다"로 재수정).
+        change_invalidates=["헬스장에 주 4회 간다",
+                            "예산은 25만원이고 헬스장 등록비가 포함이다"],
     ),
 ]
 
@@ -294,10 +300,35 @@ class UserSimulator:
         return self.persona.opening
 
     def change_turn(self) -> str:
-        """조건 변경을 제시한다."""
+        """조건 변경을 제시하고 **자기 프로필을 갱신한다**.
+
+        갱신하지 않으면 시뮬레이터가 자기 변경과 싸운다. 실측 사례:
+        "헬스장은 못 끕을 것 같아"라고 말해 놓고, 패널에 "헬스장을 등록하지
+        않는다"가 뜨자 옮은 프로필("주 4회 헬스장")과 다르다며 다시 "등록한다"로
+        고쳐 버렸다. 그러면 어떤 조건도 추적할 수 없다.
+
+        사람으로 치면 "예산이 줄었다"고 말한 다음부터는 줄어든 예산이 그 사람의
+        현재 제약이다. 그걸 반영한다.
+        """
         self.state.turn += 1
         self.state.changed = True
-        return self.persona.change_utterance
+        p = self.persona
+        # 무효화된 항목을 빼고 새 조건을 넣는다
+        for dead in p.change_invalidates:
+            key = set(re.findall(r"[가-훣]{2,}", dead))
+            for bucket in (p.goals, p.constraints, p.preferences):
+                for item in list(bucket):
+                    hits = sum(1 for k in key if k in item)
+                    if key and hits >= max(1, len(key) // 2):
+                        bucket.remove(item)
+        for added in p.change_implies:
+            if added not in p.constraints:
+                p.constraints.append(added)
+        # 이미 공개한 목록에서도 사라진 항목을 뺀다
+        self.state.disclosed = [x for x in self.state.disclosed if x in p.checklist]
+        self.state.disclosed.extend(a for a in p.change_implies
+                                    if a not in self.state.disclosed)
+        return p.change_utterance
 
     def next_turn(self, partner_text: str) -> str:
         """파트너 응답을 보고 다음 발화를 만든다."""
@@ -334,6 +365,7 @@ class UserSimulator:
             messages=[{"role": "user", "content": user_msg}],
             extra_body={"temperature": 0.0},
         )
+        METER.record("simulator.turn", self.model, r)
         text = (r.content[0].text or "").strip()
         text = re.sub(r'^["\u201c\']|["\u201d\']$', "", text).strip()
         return text or "응, 그렇게 해줘."
@@ -363,6 +395,7 @@ class UserSimulator:
             messages=[{"role": "user", "content": prompt}],
             extra_body={"temperature": 0.0},
         )
+        METER.record("simulator.checklist", "claude-sonnet-4-5-20250929", r)
         raw = r.content[0].text or ""
         m = re.search(r"\[[^\]]*\]", raw, re.S)
         vals: list[int] = []

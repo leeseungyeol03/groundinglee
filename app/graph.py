@@ -477,12 +477,38 @@ def _content_tokens(text: str) -> set[str]:
     }
 
 
+# 발화와 전제문에 붙는 조사. 길이 역정렬로 달아야 "에서"를 "에"보다 먼저 떼어낸다.
+_PARTICLES = (
+    "에서도", "에게는", "에게도", "으로는", "으로도", "부터는", "까지는",
+    "에서", "에게", "에겐", "으로", "부터", "까지", "보다", "처럼",
+    "마다", "라도", "이나", "라는", "이라", "하고", "이랑", "정도",
+    "은", "는", "이", "가", "을", "를", "에", "의", "도", "만", "와", "과",
+    "로", "랑", "야", "인", "에도",
+)
+
+
+def _strip_particle(w: str) -> str:
+    """어말 조사를 한 번 떼어낸다. 어간이 2자 미만으로 줄면 그대로 둔다."""
+    for q in _PARTICLES:
+        if len(w) > len(q) + 1 and w.endswith(q):
+            return w[: -len(q)]
+    return w
+
+
 def _tok_match(a: str, b: str) -> bool:
-    """한국어 교착 대응: 짧은 쪽이 긴 쪽의 접두사이면 같은 어간으로 본다.
-    ("코딩테스트" ↔ "코딩테스트는", "직무" ↔ "직무를")"""
+    """한국어 교착 대응: 같은 어간이면 같은 단어로 본다.
+
+    접두사 관계만 보면 한쪽에만 조사가 붙은 경우만 잡힌다.
+    ("코딩테스트" <-> "코딩테스트는" 잡힘, "토요일에" <-> "토요일은" 놓침)
+    둘 다 조사를 벗긴 뒤 비교하면 후자도 잡힌다. 의역과 유의어는 그래도
+    인정하지 않는다(문서 M2: "의역은 지지로 인정하지 않는다").
+    """
     if a == b:
         return True
-    lo, hi = (a, b) if len(a) <= len(b) else (b, a)
+    sa, sb = _strip_particle(a), _strip_particle(b)
+    if sa == sb and len(sa) >= 2:
+        return True
+    lo, hi = (sa, sb) if len(sa) <= len(sb) else (sb, sa)
     return len(lo) >= 2 and hi.startswith(lo)
 
 
